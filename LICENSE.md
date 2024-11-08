@@ -1,0 +1,2 @@
+Copyright (C) 2024 Fealinx
+All the content of the repository is provided under  the [GNU Affero General Public License version 3 (Affero GPLv3)](https://www.gnu.org/licenses/agpl-3.0.html) or more recent.
