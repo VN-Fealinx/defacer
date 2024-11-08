@@ -19,3 +19,6 @@ dependencies = [
 
 [project.optional-dependencies]
 TF = ["tensorflow==2.13.*"]
+
+[project.scripts]
+predict = "defacer.predict:main"
