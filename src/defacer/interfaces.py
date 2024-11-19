@@ -4,13 +4,10 @@ from nipype.interfaces.base import (BaseInterface, BaseInterfaceInputSpec,
                                     traits, TraitedSpec, CommandLine)
 import os
 import warnings
-import nibabel.processing as nip
-import nibabel as nib
 import numpy as np
-from scipy import ndimage
+from pathlib import Path
 
 from typing import Tuple
-import numpy as np
 from copy import deepcopy
 from skimage.measure import label
 from skimage.morphology import opening, binary_opening, ball
@@ -390,7 +387,7 @@ class ConformInputSpec(BaseInterfaceInputSpec):
 
     order = traits.Int(3, desc="Order of spline interpolation", usedefault=True)
 
-    voxel_size = traits.Tuple(float, float, float,
+    voxel_size = traits.Tuple(traits.Float, traits.Float, traits.Float,
                               desc='resampled voxel size',
                               mandatory=False)
 
@@ -417,8 +414,8 @@ class ConformOutputSpec(TraitedSpec):
     resampled = traits.File(exists=True,
                             desc='Image conformed to the required voxel size and shape.')
 
-    ori_size = traits.Tuple(desc='Size of the original input img')
-    ori_resol = traits.Tuple(desc='Resolution of the original input img')
+    ori_size = traits.Tuple(traits.Int, traits.Int, traits.Int, desc='Size of the original input img')
+    ori_resol = traits.Tuple(traits.Float, traits.Float, traits.Float, desc='Resolution of the original input img')
     ori_orient = traits.String(desc='Orientation of the original input img')
 
     corrected_affine = traits.Any(desc=('If the conformed image had a bad affine matrix that needed to be '
@@ -453,7 +450,7 @@ class Conform(BaseInterface):
 
         img = nib.funcs.squeeze_image(nib.load(fname))  # type: nib.Nifti1Image
         ori_size = img.shape[:3]
-        ori_resol = img.header['pixdim'][1:4]
+        ori_resol = tuple(img.header['pixdim'][1:4])
         ori_orient = ''.join(nib.aff2axcodes(img.affine))
 
         setattr(self, 'ori_size', ori_size)
@@ -630,8 +627,7 @@ class IntensityNormalizationInputSpec(BaseInterfaceInputSpec):
     input_image = traits.File(exists=True, desc='NIfTI image input.',
                               mandatory=True)
 
-    percentile = traits.Int(exists=True, desc='value to threshold above this '
-                            'percentile',
+    percentile = traits.Int(desc='value to threshold above this percentile',
                             mandatory=True)
 
     brain_mask = traits.File(desc='brain_mask to adapt normalization to '
@@ -654,9 +650,7 @@ class IntensityNormalizationOutputSpec(TraitedSpec):
     intensity_normalized = traits.File(exists=True,
                                        desc='Intensity normalized image')
 
-    mode = traits.Float(exists=True,
-                        desc='Most frequent value of intensities voxel'
-                        'histogram in an interval given')
+    mode = traits.Float(desc='Most frequent value of intensities voxel histogram in an interval given')
 
 
 class Normalization(BaseInterface):
@@ -684,10 +678,10 @@ class Normalization(BaseInterface):
         # conform image to desired voxel sizes and dimensions
         fname = self.inputs.input_image
         img = nib.load(fname)
-        if self.inputs.brain_mask:
+        if isdefined(self.inputs.brain_mask) and self.inputs.brain_mask:
             brain_mask = nib.load(self.inputs.brain_mask)
         else:
-            brain_mask = self.inputs.brain_mask
+            brain_mask = None
         img_normalized, mode = normalization(img,
                                              self.inputs.percentile,
                                              brain_mask,
@@ -967,6 +961,10 @@ class PredictInputSpec(BaseInterfaceInputSpec):
                           desc='Verbose output',
                           mandatory=False)
 
+    threads = traits.Int(argstr='--threads %d',
+                         desc='Number of threads to use when running on CPU.',
+                         mandatory=False)
+
     out_filename = traits.Str('map.nii.gz',
                               argstr='-o %s',
                               desc='Output filename.',
@@ -985,7 +983,7 @@ class Predict(CommandLine):
     """
     input_spec = PredictInputSpec
     output_spec = PredictOutputSpec
-    _cmd = 'predict'  # defacer.predict:main
+    _cmd = 'defacer_predict'  # defacer.predict:main
 
     def _list_outputs(self):
         outputs = self.output_spec().get()
