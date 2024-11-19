@@ -1,0 +1,19 @@
+Bootstrap: docker
+From: tensorflow/tensorflow:2.13.0
+Stage: build
+
+%files
+    brainmask.zip /data/model/
+    ./* /usr/local/defacer/
+
+%post
+    # Preparing the model files
+    apt-get update && apt-get -y install unzip
+    cd /data/model
+    unzip brainmask.zip
+    rm brainmask.zip
+
+    # Installing the defacer package
+    cd /usr/local/defacer
+    pip install .
+    pip cache purge
