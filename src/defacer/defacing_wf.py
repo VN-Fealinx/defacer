@@ -13,7 +13,7 @@ import click
 @click.option('--outdir', type=click.Path(exists=False), help='Folder (directory) where the results will be stored.')
 @click.option('--threads4mask', default=4, help='Number of CPUs to use for the segmentation of the brain (needed for the defacing).')
 @click.option('--modeldir', type=click.Path(exists=True), default='/data/model', help='Folder (directory) where the IA model for the brain masking is stored.')
-@click.option('--descriptor', type=click.Path(exists=True), default='/data/model/descriptor.json', help='File (.json) describing the info about the AI model.')
+@click.option('--descriptor', type=click.Path(exists=True), default='/data/model/brainmask/V0/model_info.json', help='File (.json) describing the info about the AI model.')
 def main(indir: Path, outdir: Path, threads4mask: int, modeldir: Path, descriptor: Path):
 
     if isinstance(indir, str):
