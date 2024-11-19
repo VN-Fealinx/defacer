@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "defacer"
-version="0.1"
+version = "0.1"
 authors = [{ name = "Victor NOZAIS", email = "vnozais@fealinx.com" }]
 description = "Package for defacing brain MRI images in DICOM format, outputing Nifti images."
 readme = "readme.md"
@@ -14,11 +14,13 @@ dependencies = [
     "nibabel>=4.0.2",
     "nipype>=1.7.0",
     "numpy>=1.21.5, <2.0.0",
-    "quickshear"
+    "quickshear",
+    "click",
 ]
 
 [project.optional-dependencies]
 TF = ["tensorflow==2.13.*"]
 
 [project.scripts]
-predict = "defacer.predict:main"
+deface = "defacer.defacing_wf:main"
+defacer_predict = "defacer.predict:main"
