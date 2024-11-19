@@ -6,12 +6,22 @@ Stage: build
     brainmask.zip /data/model/
     ./* /usr/local/defacer/
 
+%environment
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    export PATH
+
 %post
     # Preparing the model files
     apt-get update && apt-get -y install unzip
     cd /data/model
     unzip brainmask.zip
     rm brainmask.zip
+
+    # Installing dcm2niix
+    cd /usr/local/bin
+    curl -fLO https://github.com/rordenlab/dcm2niix/releases/latest/download/dcm2niix_lnx.zip
+    unzip dcm2niix_lnx.zip
+    rm dcm2niix_lnx.zip
 
     # Installing the defacer package
     cd /usr/local/defacer
