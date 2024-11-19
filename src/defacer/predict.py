@@ -13,7 +13,6 @@ import argparse
 from pathlib import Path
 import hashlib
 
-
 import numpy as np
 import nibabel
 import tensorflow as tf
@@ -95,6 +94,13 @@ def predict_parser():
         help="GPU card ID; for CPU use -1")
 
     parser.add_argument(
+        "--threads",
+        default=1,
+        type=int,
+        help="Number of threads to use when running on CPU"
+    )
+
+    parser.add_argument(
         "--verbose",
         help="increase output verbosity",
         action="store_true")
@@ -113,6 +119,7 @@ def main():
         os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
         if args.gpu < 0:
             tf.config.set_visible_devices([], 'GPU')
+            tf.config.threading.set_intra_op_parallelism_threads(args.threads)
         if _VERBOSE:
             if args.gpu >= 0:
                 print(f"Trying to run inference on GPU {args.gpu}")
@@ -130,9 +137,10 @@ def main():
     for mfile in meta_data['files']:
         mdirname = os.path.basename(args.model)
         mfilename = mfile['name']
-        if mfilename[:len(mdirname)] == mdirname:  # model dir is in both args.model and mfile['name']
-            mfilename = os.path.join(*mfilename.split(os.sep)[1:])
         model_file = os.path.join(args.model, mfilename)
+        if mfilename[:len(mdirname)] == mdirname and not os.path.exists(model_file):  # model dir is in both args.model and mfile['name']
+            mfilename = os.path.join(*mfilename.split(os.sep)[1:])
+            model_file = os.path.join(args.model, mfilename)
         predictor_files.append(model_file)
 
     if len(predictor_files) == 0:
@@ -182,6 +190,7 @@ def main():
             )
     if brainmask is not None:
         image *= brainmask
+    images = []
     images.append(image)
     # Concat all modalities
     images = np.concatenate(images, axis=-1)
