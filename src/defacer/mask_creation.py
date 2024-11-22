@@ -11,6 +11,7 @@ def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, 
                   name="crunch")
     crunch.inputs.dimensions = (160, 214, 176)
     crunch.inputs.orientation = 'RAS'
+    crunch.inputs.ignore_bad_affine = True
 
     crunched_normalization = Node(Normalization(percentile=99), name="crunched_normalization")
     workflow.connect(crunch, 'resampled', crunched_normalization, 'input_image')
