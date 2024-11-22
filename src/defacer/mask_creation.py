@@ -2,7 +2,7 @@ from nipype.pipeline.engine import Workflow, Node
 from pathlib import Path
 from typing import Union
 from defacer.interfaces import (Threshold, Normalization,
-                                Conform, Crop, Predict)
+                                Conform, Predict)
 
 
 def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, str]) -> Workflow:
