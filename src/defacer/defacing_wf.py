@@ -5,6 +5,7 @@ from nipype.interfaces.io import DataGrabber, DataSink
 from nipype.interfaces.dcm2nii import Dcm2niix
 from nipype.interfaces.quickshear import Quickshear
 from defacer.mask_creation import gen_mask_wf
+from defacer.interfaces import Resample_from_to
 import click
 
 
@@ -61,11 +62,20 @@ def main(indir: Path, outdir: Path, threads4mask: int, modeldir: Path, descripto
     mask_wf = gen_mask_wf(threads4mask, model=modeldir, descriptior=descriptor)
     workflow.add_nodes([mask_wf])
 
+    # To make sure the mask and the original image are in the same space
+    correct_affine = Node(Resample_from_to(), name="correct_affine")
+    correct_affine.inputs.spline_order = 0
+    correct_affine.inputs.out_suffix = '_affineOK'
+
     defacing = Node(Quickshear(), name='defacing')
 
     workflow.connect(dcm2nii, 'converted_files', mask_wf, 'crunch.img')
+
+    workflow.connect(mask_wf, 'binarize_brain_mask.thresholded', correct_affine, 'moving_image')
+    workflow.connect(dcm2nii, 'converted_files', correct_affine, 'fixed_image')
+
     workflow.connect(dcm2nii, 'converted_files', defacing, 'in_file')  # For now, expect 1 file only from dcm2nii ouput, also, the dcm2nii.bids (json) sidecar
-    workflow.connect(mask_wf, 'binarize_brain_mask.thresholded', defacing, 'mask_file')
+    workflow.connect(correct_affine, 'resampled_image', defacing, 'mask_file')
 
     sink_node = Node(DataSink(),
                      name='sink_node')
