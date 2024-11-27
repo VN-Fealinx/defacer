@@ -36,14 +36,18 @@ For example (note that the DICOM files don't need the `.dcm` shown here):
             │   :
             :
 
+
+> **/!\ Important note**: The pipeline will run on all the aquisitions in the input folder, however they **must** all contain the same number of images (echoes). For example, a SWI acquisition will generally have 2 echoes while a T1w acquisition only 1, so they can't be processed at the same time. The number of echo per DICOM series is spcified by the `--echo_nb` argument (see below).
+
 ### Command line
 To run the pipeline with the container, use the command line below and:
 - replace the `/path/to/input_folder` by your real input folder path
 - replace the `/path/to/output_folder` by your real output folder path
 - replace `/path/to/defacer.sif` by the actual path to the image
+- change the "1" after `--echo_nb` to the number of expected echos (3D images) in each DICOM series
 - (opt.) change the "6" after `--threads4mask` by the number of CPUs you want to use for the brain masking step
 - Don't touch anything else
 
 ```bash
-apptainer exec --bind /path/to/input_folder:/mnt/input:rw,/path/to/output_folder:/mnt/output:rw /path/to/defacer.sif deface --indir /mnt/input --outdir /mnt/output --threads4mask 6
+apptainer exec --bind /path/to/input_folder:/mnt/input:rw,/path/to/output_folder:/mnt/output:rw /path/to/defacer.sif deface --indir /mnt/input --outdir /mnt/output --echo_nb 1 --threads4mask 6
 ```

@@ -5,15 +5,16 @@ from defacer.interfaces import (Threshold, Normalization,
                                 Conform, Predict)
 
 
-def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, str]) -> Workflow:
-    workflow = Workflow(name='brain_mask_creation')
+def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, str], suffix: str) -> Workflow:
+    workflow = Workflow(name=f'brain_mask_creation{suffix}')
     crunch = Node(Conform(),
-                  name="crunch")
+                  name=f"crunch{suffix}")
     crunch.inputs.dimensions = (160, 214, 176)
     crunch.inputs.orientation = 'RAS'
     crunch.inputs.ignore_bad_affine = True
 
-    crunched_normalization = Node(Normalization(percentile=99), name="crunched_normalization")
+    crunched_normalization = Node(Normalization(percentile=99),
+                                  name=f"crunched_normalization{suffix}")
     workflow.connect(crunch, 'resampled', crunched_normalization, 'input_image')
 
     node_env = {
@@ -23,7 +24,8 @@ def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, 
         "VECLIB_MAXIMUM_THREADS": str(threads),
         "NUMEXPR_NUM_THREADS": str(threads)
     }
-    brain_mask = Node(Predict(), "brain_mask", environ=node_env)
+    brain_mask = Node(Predict(),
+                      name=f"brain_mask{suffix}", environ=node_env)
     brain_mask.inputs.out_filename = 'brain_mask.nii.gz'
     brain_mask.inputs.gpu_number = -1
     brain_mask.plugin_args = {'sbatch_args': f'--nodes 1 --cpus-per-task {threads}'}
@@ -33,7 +35,8 @@ def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, 
 
     workflow.connect(crunched_normalization, 'intensity_normalized', brain_mask, 'img')
 
-    uncrunch_mask = Node(Conform(), name="uncrunch_mask")
+    uncrunch_mask = Node(Conform(),
+                         name=f"uncrunch_mask{suffix}")
     uncrunch_mask.inputs.order = 0
     uncrunch_mask.inputs.ignore_bad_affine = True
 
@@ -42,7 +45,8 @@ def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, 
     workflow.connect(crunch, 'ori_resol', uncrunch_mask, 'voxel_size')
     workflow.connect(crunch, 'ori_orient', uncrunch_mask, 'orientation')
 
-    binarize_brain_mask = Node(Threshold(threshold=0.5), name="binarize_brain_mask")
+    binarize_brain_mask = Node(Threshold(threshold=0.5),
+                               name=f"binarize_brain_mask{suffix}")
     binarize_brain_mask.inputs.binarize = True
     binarize_brain_mask.inputs.open = 10  # morphological opening of clusters using a ball of radius 3
     binarize_brain_mask.inputs.minVol = 30000  # Get rif of potential small clusters

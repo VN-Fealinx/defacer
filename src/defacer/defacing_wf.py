@@ -9,13 +9,20 @@ from defacer.interfaces import Resample_from_to
 import click
 
 
+def as_list(arg, ind):
+    if not isinstance(arg, list):
+        arg = [arg]
+    return arg[ind]
+
+
 @click.command()
 @click.option('--indir', type=click.Path(exists=True), help='Folder (directory) containing all the DICOM series (in sub-folders).')
 @click.option('--outdir', type=click.Path(exists=False), help='Folder (directory) where the results will be stored.')
+@click.option('--echo_nb', default=1, help='Number of expected images extracted from the DICOM series (default is 1). Must be the same for all series.')
 @click.option('--threads4mask', default=4, help='Number of CPUs to use for the segmentation of the brain (needed for the defacing).')
 @click.option('--modeldir', type=click.Path(exists=True), default='/data/model', help='Folder (directory) where the IA model for the brain masking is stored.')
 @click.option('--descriptor', type=click.Path(exists=True), default='/data/model/brainmask/V0/model_info.json', help='File (.json) describing the info about the AI model.')
-def main(indir: Path, outdir: Path, threads4mask: int, modeldir: Path, descriptor: Path):
+def main(indir: Path, outdir: Path, echo_nb: int, threads4mask: int, modeldir: Path, descriptor: Path):
 
     if isinstance(indir, str):
         indir = Path(indir).absolute()
@@ -23,6 +30,13 @@ def main(indir: Path, outdir: Path, threads4mask: int, modeldir: Path, descripto
         outdir = Path(outdir).absolute()
 
     print("indir : " + str(indir))
+
+    if echo_nb < 1:
+        print('Non-positive echo number. Auto set to 1.')
+        echo_nb = 1
+    if threads4mask < 1:
+        print('Non-positive number of theads. Auto set to 1.')
+        threads4mask = 1
 
     if not outdir.exists():
         Path.mkdir(outdir)
@@ -59,32 +73,36 @@ def main(indir: Path, outdir: Path, threads4mask: int, modeldir: Path, descripto
 
     workflow.connect(datagrabber, 'aquisition_folder', dcm2nii, 'source_dir')
 
-    mask_wf = gen_mask_wf(threads4mask, model=modeldir, descriptior=descriptor)
-    workflow.add_nodes([mask_wf])
-
-    # To make sure the mask and the original image are in the same space
-    correct_affine = Node(Resample_from_to(), name="correct_affine")
-    correct_affine.inputs.spline_order = 0
-    correct_affine.inputs.out_suffix = '_affineOK'
-
-    defacing = Node(Quickshear(), name='defacing')
-
-    workflow.connect(dcm2nii, 'converted_files', mask_wf, 'crunch.img')
-
-    workflow.connect(mask_wf, 'binarize_brain_mask.thresholded', correct_affine, 'moving_image')
-    workflow.connect(dcm2nii, 'converted_files', correct_affine, 'fixed_image')
-
-    workflow.connect(dcm2nii, 'converted_files', defacing, 'in_file')  # For now, expect 1 file only from dcm2nii ouput, also, the dcm2nii.bids (json) sidecar
-    workflow.connect(correct_affine, 'resampled_image', defacing, 'mask_file')
-
     sink_node = Node(DataSink(),
                      name='sink_node')
     sink_node.inputs.base_directory = str(outdir / 'results')
     sink_node.inputs.substitutions = [
         ('_aquisition_id_', '')
     ]
-    workflow.connect(defacing, 'out_file', sink_node, 'defaced_images')
-    workflow.connect(dcm2nii, 'bids', sink_node, 'defaced_images.@json')
+
+    mask_wf_list = []
+    for echo in range(echo_nb):
+        suffix = f'_{echo}' if echo_nb > 1 else ''
+        mask_wf_list.append(gen_mask_wf(threads4mask, model=modeldir, descriptior=descriptor, suffix=suffix))
+        workflow.add_nodes([mask_wf_list[echo]])
+
+    # To make sure the mask and the original image are in the same space
+        correct_affine = Node(Resample_from_to(), name=f"correct_affine{suffix}")
+        correct_affine.inputs.spline_order = 0
+        correct_affine.inputs.out_suffix = '_affineOK'
+
+        defacing = Node(Quickshear(), name=f'defacing{suffix}')
+
+        workflow.connect(dcm2nii, ('converted_files', as_list, echo), mask_wf_list[echo], f'crunch{suffix}.img')
+
+        workflow.connect(mask_wf_list[echo], f'binarize_brain_mask{suffix}.thresholded', correct_affine, 'moving_image')
+        workflow.connect(dcm2nii, ('converted_files', as_list, echo), correct_affine, 'fixed_image')
+
+        workflow.connect(dcm2nii, ('converted_files', as_list, echo), defacing, 'in_file')  # For now, expect 1 file only from dcm2nii ouput, also, the dcm2nii.bids (json) sidecar
+        workflow.connect(correct_affine, 'resampled_image', defacing, 'mask_file')
+
+        workflow.connect(defacing, 'out_file', sink_node, f'defaced_images.@im{suffix}')
+        workflow.connect(dcm2nii, ('bids', as_list, echo), sink_node, f'defaced_images.@json{suffix}')
 
     workflow.config['execution']['stop_on_first_crash'] = 'True'  # For debug
     workflow.run()
