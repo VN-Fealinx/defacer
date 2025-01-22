@@ -5,7 +5,7 @@ from defacer.interfaces import (Threshold, Normalization,
                                 Conform, Predict)
 
 
-def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, str], suffix: str) -> Workflow:
+def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, str], suffix: str, open_iter=20) -> Workflow:
     workflow = Workflow(name=f'brain_mask_creation{suffix}')
     crunch = Node(Conform(),
                   name=f"crunch{suffix}")
@@ -48,7 +48,7 @@ def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, 
     binarize_brain_mask = Node(Threshold(threshold=0.5),
                                name=f"binarize_brain_mask{suffix}")
     binarize_brain_mask.inputs.binarize = True
-    binarize_brain_mask.inputs.open = 10  # morphological opening of clusters using a ball of radius 3
+    binarize_brain_mask.inputs.open_iter = open_iter
     binarize_brain_mask.inputs.minVol = 30000  # Get rif of potential small clusters
     binarize_brain_mask.inputs.clusterCheck = 'size'  # Select biggest cluster
 

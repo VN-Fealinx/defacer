@@ -4,8 +4,8 @@ from nipype.interfaces.utility import IdentityInterface, Function
 from nipype.interfaces.io import DataGrabber, DataSink
 from nipype.interfaces.dcm2nii import Dcm2niix
 from nipype.interfaces.quickshear import Quickshear
-from defacer.mask_creation import gen_mask_wf
-from defacer.interfaces import Resample_from_to
+from .mask_creation import gen_mask_wf
+from .interfaces import Resample_from_to, Nii2dcm
 import click
 
 
@@ -22,7 +22,16 @@ def as_list(arg, ind):
 @click.option('--threads4mask', default=4, help='Number of CPUs to use for the segmentation of the brain (needed for the defacing).')
 @click.option('--modeldir', type=click.Path(exists=True), default='/data/model', help='Folder (directory) where the IA model for the brain masking is stored.')
 @click.option('--descriptor', type=click.Path(exists=True), default='/data/model/brainmask/V0/model_info.json', help='File (.json) describing the info about the AI model.')
-def main(indir: Path, outdir: Path, echo_nb: int, threads4mask: int, modeldir: Path, descriptor: Path):
+@click.option('--dcm_type', help='Expected type of DICOM file (MR or SVR). If not specfied, will create generic DICOM files.')
+@click.option('--opening', default=20, help='Number of morphological erosion done during the brain mask cleaning step.')
+def main(indir: Path,
+         outdir: Path,
+         echo_nb: int,
+         threads4mask: int,
+         modeldir: Path,
+         descriptor: Path,
+         dcm_type: str = 'MR',
+         opening: int = 20):
 
     if isinstance(indir, str):
         indir = Path(indir).absolute()
@@ -83,7 +92,7 @@ def main(indir: Path, outdir: Path, echo_nb: int, threads4mask: int, modeldir: P
     mask_wf_list = []
     for echo in range(echo_nb):
         suffix = f'_{echo}' if echo_nb > 1 else ''
-        mask_wf_list.append(gen_mask_wf(threads4mask, model=modeldir, descriptior=descriptor, suffix=suffix))
+        mask_wf_list.append(gen_mask_wf(threads4mask, model=modeldir, descriptior=descriptor, suffix=suffix, open_iter=opening))
         workflow.add_nodes([mask_wf_list[echo]])
 
     # To make sure the mask and the original image are in the same space
@@ -101,7 +110,15 @@ def main(indir: Path, outdir: Path, echo_nb: int, threads4mask: int, modeldir: P
         workflow.connect(dcm2nii, ('converted_files', as_list, echo), defacing, 'in_file')  # For now, expect 1 file only from dcm2nii ouput, also, the dcm2nii.bids (json) sidecar
         workflow.connect(correct_affine, 'resampled_image', defacing, 'mask_file')
 
+        nii2dcm = Node(Nii2dcm(), name=f'nii2dcm{suffix}')
+        nii2dcm.inputs.out_dir = f'new_dicom{suffix}'
+        nii2dcm.inputs.dcm_type = dcm_type
+
+        workflow.connect(defacing, 'out_file', nii2dcm, 'nii_input')
+        workflow.connect(datagrabber, 'aquisition_folder', nii2dcm, 'dcm_ref')
+
         workflow.connect(defacing, 'out_file', sink_node, f'defaced_images.@im{suffix}')
+        workflow.connect(nii2dcm, 'out_dir', sink_node, f'defaced_images.@im{suffix}')
         workflow.connect(dcm2nii, ('bids', as_list, echo), sink_node, f'defaced_images.@json{suffix}')
 
     workflow.config['execution']['stop_on_first_crash'] = 'True'  # For debug

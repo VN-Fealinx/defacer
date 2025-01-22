@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Tuple
 from copy import deepcopy
 from skimage.measure import label
-from skimage.morphology import opening, binary_opening, ball
+from skimage.morphology import opening, binary_erosion, binary_dilation, ball
 
 import nibabel.processing as nip
 import nibabel as nib
@@ -140,7 +140,7 @@ def threshold(img: nib.Nifti1Image,
               thr: float = 0.4,
               sign: str = '+',
               binarize: bool = False,
-              open: int = 0,
+              open_iter: int = 0,
               clusterCheck: str = 'size',
               minVol: int = 0) -> nib.Nifti1Image:
     """Create a brain_mask by putting all the values below the threshold.
@@ -152,7 +152,7 @@ def threshold(img: nib.Nifti1Image,
                 (white matter) and remove background
             sign (str): '+' zero anything below, '-' zero anythin above threshold
             binarize (bool): make a binary mask
-            open (int): do a morphological opening using the given int for the radius
+            open_iter (int): do a morphological opening using the given int for the radius
                 of the ball used as footprint. If 0 is given, skip this step.
             clusterCheck (str): Can be 'top', 'size', or 'all'. Labels the clusters in the mask,
                 then keep the one highest in the brain if 'top' was selected, or keep
@@ -189,11 +189,15 @@ def threshold(img: nib.Nifti1Image,
     else:
         raise ValueError(f'Unsupported sign argument value {sign} (+ or -)...')
 
-    if open:
+    if open_iter:
         if binarize:
-            array = binary_opening(array, footprint=ball(open)).astype(np.uint8)
+            for i in range(open_iter):
+                array = binary_erosion(array)
+            for i in range(open_iter):
+                array = binary_dilation(array)
+            array = array.astype(np.uint8)
         else:
-            array = opening(array, footprint=ball(open))
+            array = opening(array, footprint=ball(open_iter))
     if clusterCheck in ('top', 'size') or minVol:
         labeled_clusters = label(array)
         clst,  clst_cnt = np.unique(
@@ -726,9 +730,9 @@ class ThresholdInputSpec(BaseInterfaceInputSpec):
     binarize = traits.Bool(False, exists=True,
                            desc='Binarize image')
 
-    open = traits.Int(0, usedefault=True,
-                      desc=('For binary opening of the clusters, radius of the ball used '
-                            'as footprint (skip opening if <= 0'))
+    open_iter = traits.Int(0, usedefault=True,
+                           desc=('For binary opening of the clusters, radius of the ball used '
+                                 'as footprint (skip opening if <= 0'))
 
     clusterCheck = traits.Str('size', usedefault=True,
                               desc=("Can be 'size', 'top' or 'all'. Select one cluster "
@@ -781,7 +785,7 @@ class Threshold(BaseInterface):
                                 self.inputs.threshold,
                                 sign=self.inputs.sign,
                                 binarize=self.inputs.binarize,
-                                open=self.inputs.open,
+                                open_iter=self.inputs.open_iter,
                                 clusterCheck=self.inputs.clusterCheck,
                                 minVol=self.inputs.minVol)
 
@@ -989,4 +993,68 @@ class Predict(CommandLine):
     def _list_outputs(self):
         outputs = self.output_spec().get()
         outputs["segmentation"] = os.path.abspath(os.path.basename(str(self.inputs.out_filename)))
+        return outputs
+
+
+class Nii2dcmInputSpec(BaseInterfaceInputSpec):
+    """nii2dcm input specification."""
+    nii_input = traits.File(position=0,
+                            argstr="%s",
+                            desc='Nifti file to convert to DICOM',
+                            mandatory=True,
+                            exists=True,
+                            )
+    out_dir = traits.Directory(position=1,
+                               argstr="%s",
+                               desc='Output folder for the new DICOM series',
+                               mandatory=True,
+                               )
+    dcm_type = traits.Enum('MR', 'SVR',
+                           argstr="--dicom_type %s",
+                           desc=("DICOM type. MR folr multi-slice 2D MRI, SVR for 3D SVR (slice-to-volume registration) MRI. "
+                                 "If not specified, will create a generic DICOM output."))
+
+    dcm_ref = traits.File(argstr="--ref_dicom %s",
+                          desc='DICOM file or folder to use to transfer metadata to the new DICOM series')
+
+
+class Nii2dcmOutputSpec(TraitedSpec):
+    out_dir = traits.Directory(desc='Output folder for the new DICOM series',
+                               exists=True)
+
+
+class Nii2dcm(CommandLine):
+    """Run nii2dcm
+
+    """
+    input_spec = Nii2dcmInputSpec
+    output_spec = Nii2dcmOutputSpec
+    _cmd = 'defacer_predict'  # defacer.predict:main
+
+    def _run_interface(self, runtime, correct_return_codes=...):
+        out_dir = Path(self.input_spec.out_dir)
+        if not out_dir.exists():
+            out_dir.mkdir()
+            self.input_spec.out_dir = str(out_dir)
+        dcm_ref = Path(self.input_spec.dcm_ref)
+        if dcm_ref.is_file():
+            pass
+        elif dcm_ref.is_dir():
+            isdcm = False
+            for infile in dcm_ref.iterdir():
+                if infile.is_file():
+                    with open(infile, "rb") as fp:
+                        fp.read(128)
+                        isdcm = (fp.read(4) == b"DICM")
+                    if isdcm:
+                        break
+            if isdcm:
+                self.input_spec.dcm_ref = str(infile)
+            else:
+                raise ValueError('No DICOM file found for the dcm_ref input of the Nii2dcm interface')
+        return super()._run_interface(runtime, correct_return_codes)
+
+    def _list_outputs(self):
+        outputs = self.output_spec().get()
+        outputs["out_dir"] = Path(self.inputs.out_dir).absolute()
         return outputs
