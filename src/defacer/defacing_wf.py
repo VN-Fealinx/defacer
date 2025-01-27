@@ -22,7 +22,7 @@ def as_list(arg, ind):
 @click.option('--threads4mask', default=4, help='Number of CPUs to use for the segmentation of the brain (needed for the defacing).')
 @click.option('--modeldir', type=click.Path(exists=True), default='/data/model', help='Folder (directory) where the IA model for the brain masking is stored.')
 @click.option('--descriptor', type=click.Path(exists=True), default='/data/model/brainmask/V0/model_info.json', help='File (.json) describing the info about the AI model.')
-@click.option('--dcm_type', help='Expected type of DICOM file (MR or SVR). If not specfied, will create generic DICOM files.')
+@click.option('--dcm_type', default='SVR', help='Expected type of DICOM file (MR or SVR). If not specfied, will create generic DICOM files.')
 @click.option('--opening', default=20, help='Number of morphological erosion done during the brain mask cleaning step.')
 def main(indir: Path,
          outdir: Path,
@@ -30,7 +30,7 @@ def main(indir: Path,
          threads4mask: int,
          modeldir: Path,
          descriptor: Path,
-         dcm_type: str = 'MR',
+         dcm_type: str = 'SVR',
          opening: int = 20):
 
     if isinstance(indir, str):
@@ -118,11 +118,15 @@ def main(indir: Path,
         workflow.connect(datagrabber, 'aquisition_folder', nii2dcm, 'dcm_ref')
 
         workflow.connect(defacing, 'out_file', sink_node, f'defaced_images.@im{suffix}')
-        workflow.connect(nii2dcm, 'out_dir', sink_node, f'defaced_images.@im{suffix}')
+        workflow.connect(nii2dcm, 'out_dir', sink_node, f'defaced_images.@dcm{suffix}')
         workflow.connect(dcm2nii, ('bids', as_list, echo), sink_node, f'defaced_images.@json{suffix}')
 
     workflow.config['execution']['stop_on_first_crash'] = 'True'  # For debug
-    workflow.run()
+    result = workflow.run()
+    res = {node.itername: node for node in result.nodes}
+    out_dcm = [[o for o in res[n].result.outputs.out_file if o.endswith('new_dicom')][0]
+               for n in res if n.startswith('defacer_wf.sink_node')]
+    return out_dcm
 
 
 if __name__ == '__main__':
