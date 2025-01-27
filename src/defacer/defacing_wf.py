@@ -91,7 +91,7 @@ def main(indir: Path,
 
     mask_wf_list = []
     for echo in range(echo_nb):
-        suffix = f'_{echo}' if echo_nb > 1 else ''
+        suffix = f'_e{echo + 1}' if echo_nb > 1 else ''
         mask_wf_list.append(gen_mask_wf(threads4mask, model=modeldir, descriptior=descriptor, suffix=suffix, open_iter=opening))
         workflow.add_nodes([mask_wf_list[echo]])
 
@@ -111,7 +111,7 @@ def main(indir: Path,
         workflow.connect(correct_affine, 'resampled_image', defacing, 'mask_file')
 
         nii2dcm = Node(Nii2dcm(), name=f'nii2dcm{suffix}')
-        nii2dcm.inputs.out_dir = f'new_dicom{suffix}'
+        nii2dcm.inputs.out_dir = f'defaced_dicom{suffix}'
         nii2dcm.inputs.dcm_type = dcm_type
 
         workflow.connect(defacing, 'out_file', nii2dcm, 'nii_input')
@@ -124,8 +124,9 @@ def main(indir: Path,
     workflow.config['execution']['stop_on_first_crash'] = 'True'  # For debug
     result = workflow.run()
     res = {node.itername: node for node in result.nodes}
-    out_dcm = [[o for o in res[n].result.outputs.out_file if o.endswith('new_dicom')][0]
-               for n in res if n.startswith('defacer_wf.sink_node')]
+    out_dcm = []
+    for sink in [res[n] for n in res if n.startswith('defacer_wf.sink_node')]:
+        out_dcm += [o for o in sink.result.outputs.out_file if 'defaced_dicom' in o]
     return out_dcm
 
 
