@@ -1029,14 +1029,14 @@ class Nii2dcm(CommandLine):
     """
     input_spec = Nii2dcmInputSpec
     output_spec = Nii2dcmOutputSpec
-    _cmd = 'defacer_predict'  # defacer.predict:main
+    _cmd = 'nii2dcm'  # defacer.predict:main
 
-    def _run_interface(self, runtime, correct_return_codes=...):
-        out_dir = Path(self.input_spec.out_dir)
+    def _run_interface(self, runtime, correct_return_codes=(0,)):
+        out_dir = Path(self.inputs.out_dir)
         if not out_dir.exists():
             out_dir.mkdir()
-            self.input_spec.out_dir = str(out_dir)
-        dcm_ref = Path(self.input_spec.dcm_ref)
+            self.inputs.out_dir = str(out_dir)
+        dcm_ref = Path(self.inputs.dcm_ref)
         if dcm_ref.is_file():
             pass
         elif dcm_ref.is_dir():
@@ -1049,7 +1049,7 @@ class Nii2dcm(CommandLine):
                     if isdcm:
                         break
             if isdcm:
-                self.input_spec.dcm_ref = str(infile)
+                self.inputs.dcm_ref = str(infile)
             else:
                 raise ValueError('No DICOM file found for the dcm_ref input of the Nii2dcm interface')
         return super()._run_interface(runtime, correct_return_codes)
