@@ -16,6 +16,13 @@ Follow these steps
 3. Make sure you have installed Apptainer on your machine (you will likely need root privileges). The [Quick start page of Apptainer can be found here](https://apptainer.org/docs/user/main/quick_start.html).
 4. From the root folder of the project, run `apptainer build defacer.sif defacer_apptainer.recipe`. This will create the apptainer image `defacer.sif` that can be used to run the defacing pipeline.
 
+## Building the Docker image
+Follow these steps
+1. Download (or clone) this repository from Github to your machine.
+2. Download the model files from here: [https://cloud.efixia.com/sharing/Mn9LB5mIR](https://cloud.efixia.com/sharing/Mn9LB5mIR) and store the zip file (still zipped, no need to uncompress it) in the root folder of the project (i.e. next to the `Dockerfile` file).
+3. Make sure you have Docker installed on your machine (you will need root privileges).
+4. From the root folder of the project, run `docker build -t myId/defacer .` (replace `myId` by your username).
+
 ## Running the pipeline through the container
 ### Input structure
 The pipeline expects its input data to be organized in an input folder, containing one sub-folder per aquisition to deface (each aquisition subfolder will here contain the DICOM series of said aquisition). The name of the subfolder will be used to name the output folder.
@@ -48,6 +55,16 @@ To run the pipeline with the container, use the command line below and:
 - (opt.) change the "6" after `--threads4mask` by the number of CPUs you want to use for the brain masking step
 - Don't touch anything else
 
+Using Apptainer:
 ```bash
 apptainer exec --bind /path/to/input_folder:/mnt/input:rw,/path/to/output_folder:/mnt/output:rw /path/to/defacer.sif deface --indir /mnt/input --outdir /mnt/output --echo_nb 1 --threads4mask 6
+```
+
+Using Docker (also replace `myId` here):
+```bash
+docker docker run --rm --name defacer \
+    --volume /path/to/input_folder:/mnt/input_data \
+    --volume /path/to/output_folder:/mnt/output \
+    myId/defacer \
+    deface --indir /mnt/input --outdir /mnt/output --echo_nb 1 --threads4mask 6
 ```
