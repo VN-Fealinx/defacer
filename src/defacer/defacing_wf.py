@@ -3,9 +3,9 @@ from nipype.pipeline.engine import Workflow, Node, JoinNode
 from nipype.interfaces.utility import IdentityInterface, Function
 from nipype.interfaces.io import DataGrabber, DataSink
 from nipype.interfaces.dcm2nii import Dcm2niix
-from nipype.interfaces.quickshear import Quickshear
+# from nipype.interfaces.quickshear import Quickshear
 from .mask_creation import gen_mask_wf
-from .interfaces import Resample_from_to, Nii2dcm
+from .interfaces import Resample_from_to, Nii2dcm, Quickshear2
 import click
 
 
@@ -100,7 +100,7 @@ def main(indir: Path,
         correct_affine.inputs.spline_order = 0
         correct_affine.inputs.out_suffix = '_affineOK'
 
-        defacing = Node(Quickshear(), name=f'defacing{suffix}')
+        defacing = Node(Quickshear2(), name=f'defacing{suffix}')
 
         workflow.connect(dcm2nii, ('converted_files', as_list, echo), mask_wf_list[echo], f'crunch{suffix}.img')
 

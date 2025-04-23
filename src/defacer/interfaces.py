@@ -1058,3 +1058,191 @@ class Nii2dcm(CommandLine):
         outputs = self.output_spec().get()
         outputs["out_dir"] = Path(self.inputs.out_dir).absolute()
         return outputs
+
+
+def edge_mask(mask):
+    """Find the edges of a mask or masked image
+
+    Parameters
+    ----------
+    mask : 3D array
+        Binary mask (or masked image) with axis orientation LPS or RPS, and the
+        non-brain region set to 0
+
+    Returns
+    -------
+    2D array
+        Outline of sagittal profile (PS orientation) of mask
+    """
+    # Sagittal profile
+    brain = mask.any(axis=0)
+
+    # Simple edge detection
+    edgemask = (
+        4 * brain
+        - np.roll(brain, 1, 0)
+        - np.roll(brain, -1, 0)
+        - np.roll(brain, 1, 1)
+        - np.roll(brain, -1, 1)
+        != 0
+    )
+    return edgemask.astype('uint8')
+
+
+def convex_hull(brain):
+    """Find the lower half of the convex hull of non-zero points
+
+    Implements Andrew's monotone chain algorithm [0].
+
+    [0] https://en.wikibooks.org/wiki/Algorithm_Implementation/Geometry/Convex_hull/Monotone_chain
+
+    Parameters
+    ----------
+    brain : 2D array
+        2D array in PS axis ordering
+
+    Returns
+    -------
+    (2, N) array
+        Sequence of points in the lower half of the convex hull of brain
+    """
+    # convert brain to a list of points in an n x 2 matrix where n_i = (x,y)
+    pts = np.vstack(np.nonzero(brain)).T
+
+    def cross(o, a, b):
+        return np.cross(a - o, b - o)
+
+    lower = []
+    for p in pts:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    return np.array(lower).T
+
+
+def quickshear2(anat_img, mask_img, buff=10):
+    """Deface image using Quickshear algorithm (revisited)
+
+    Parameters
+    ----------
+    anat_img : SpatialImage
+        Nibabel image of anatomical scan, to be defaced
+    mask_img : SpatialImage
+        Nibabel image of skull-stripped brain mask or masked anatomical
+    buff : int
+        Distance from mask to set shearing plane
+
+    Returns
+    -------
+    SpatialImage
+        Nibabel image of defaced anatomical scan
+    """
+    src_ornt = nib.io_orientation(mask_img.affine)
+    tgt_ornt = nib.orientations.axcodes2ornt('RPS')
+    to_RPS = nib.orientations.ornt_transform(src_ornt, tgt_ornt)
+    from_RPS = nib.orientations.ornt_transform(tgt_ornt, src_ornt)
+
+    mask_RPS = nib.orientations.apply_orientation(mask_img.dataobj, to_RPS)
+
+    edgemask = edge_mask(mask_RPS)
+    low = convex_hull(edgemask)
+    xdiffs, ydiffs = np.diff(low)  # Not a great way to find the slope...
+    min_slope = ydiffs[0] / xdiffs[0]
+    # min_slope is not great but is a starting point
+    # yint = low[1][0] - (low[0][0] * slope) - buff
+
+    # Slope between the most anterior and the most ventral voxels
+    front_vox = low[:, 0]
+    bottom_vox = low[:, np.where(low[1] == min(low[1]))[0][0]]
+    max_slope = (bottom_vox - front_vox)[1]/(bottom_vox - front_vox)[0]
+    # max_slope gives really good results but may be a bit too agressive
+    slope = (max_slope + min_slope) / 2  # The mean should do fine
+
+    # Search of the point on the hull where the slope is tangente to the brain
+    for i, pnt in enumerate(low.T):
+        yint = pnt[1] - slope*pnt[0]
+        if i == (len(low.T) - 1):
+            break
+        found = True
+        for pnt2 in low.T[i+1:]:
+            if pnt2[1] < (pnt2[0]*slope + yint):
+                found = False
+                break  # at least one point below the shear line, bad yint
+        if found:  # no point below the shear line
+            break  # We keep the good yint
+
+    yint -= buff
+
+    ys = np.arange(0, mask_RPS.shape[2]) * slope + yint
+    defaced_mask_RPS = np.ones(mask_RPS.shape, dtype='bool')
+
+    for x, y in zip(np.nonzero(ys > 0)[0], ys.astype(int)):
+        defaced_mask_RPS[:, x, :y] = 0
+
+    defaced_mask = nib.orientations.apply_orientation(defaced_mask_RPS, from_RPS)
+
+    return anat_img.__class__(
+        np.asanyarray(anat_img.dataobj) * defaced_mask,
+        anat_img.affine,
+        anat_img.header,
+    )
+
+
+class Quickshear2InputSpec(BaseInterfaceInputSpec):
+    """Input parameter to apply the defacing algorithm to an anatomical image"""
+    in_file = traits.File(
+        exists=True,
+        mandatory=True,
+        desc="neuroimage to deface",
+    )
+    mask_file = traits.File(
+        exists=True, desc="brain mask", mandatory=True
+    )
+    out_file = traits.File(
+        name_template="%s_defaced",
+        name_source="in_file",
+        desc="defaced output image",
+        keep_extension=True,
+    )
+    buff = traits.Int(
+        10,
+        usedefault=True,
+        desc="buffer size (in voxels) between shearing " "plane and the brain",
+    )
+
+
+class Quickshear2OutputSpec(TraitedSpec):
+    """Output class
+
+    Args:
+        out_file (nib.Nifti1Image): defaced image
+    """
+    out_file = traits.File(exists=True, desc="defaced output image")
+
+
+class Quickshear2(BaseInterface):
+    input_spec = Quickshear2InputSpec
+    output_spec = Quickshear2OutputSpec
+
+    def _run_interface(self, runtime):
+        """Run main programm
+        """
+        anat_f = self.inputs.in_file
+        anat_img = nib.funcs.squeeze_image(nib.load(anat_f))
+        mask_f = self.inputs.mask_file
+        mask_img = nib.funcs.squeeze_image(nib.load(mask_f))
+        defaced_im = quickshear2(anat_img, mask_img, self.inputs.buff)
+
+        nib.save(defaced_im, self.inputs.out_file)
+        setattr(self, "out_path", os.path.abspath(self.inputs.out_file))
+
+        return runtime
+
+    def _list_outputs(self):
+        """
+        Just gets the absolute path to the scheme file name
+        """
+        outputs = self.output_spec().get()
+        outputs["out_file"] = getattr(self, "out_path")
+        return outputs
