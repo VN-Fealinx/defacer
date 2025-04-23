@@ -1199,11 +1199,8 @@ class Quickshear2InputSpec(BaseInterfaceInputSpec):
     mask_file = traits.File(
         exists=True, desc="brain mask", mandatory=True
     )
-    out_file = traits.File(
-        name_template="%s_defaced",
-        name_source="in_file",
+    outname = traits.Str(
         desc="defaced output image",
-        keep_extension=True,
     )
     buff = traits.Int(
         10,
@@ -1232,10 +1229,15 @@ class Quickshear2(BaseInterface):
         anat_img = nib.funcs.squeeze_image(nib.load(anat_f))
         mask_f = self.inputs.mask_file
         mask_img = nib.funcs.squeeze_image(nib.load(mask_f))
+        if not isdefined(self.inputs.outname):
+            _, base, _ = split_filename(anat_f)
+            outname = base + '_defaced.nii.gz'
+        else:
+            outname = self.inputs.outname
         defaced_im = quickshear2(anat_img, mask_img, self.inputs.buff)
 
-        nib.save(defaced_im, self.inputs.out_file)
-        setattr(self, "out_path", os.path.abspath(self.inputs.out_file))
+        nib.save(defaced_im, outname)
+        setattr(self, "outname", os.path.abspath(outname))
 
         return runtime
 
@@ -1244,5 +1246,5 @@ class Quickshear2(BaseInterface):
         Just gets the absolute path to the scheme file name
         """
         outputs = self.output_spec().get()
-        outputs["out_file"] = getattr(self, "out_path")
+        outputs["out_file"] = getattr(self, "outname")
         return outputs

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "defacer"
-version = "0.2"
+version = "0.3"
 authors = [{ name = "Victor NOZAIS", email = "vnozais@fealinx.com" }]
 description = "Package for defacing brain MRI images in DICOM format, outputing Nifti images."
 readme = "readme.md"
