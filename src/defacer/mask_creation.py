@@ -5,7 +5,7 @@ from defacer.interfaces import (Threshold, Normalization,
                                 Conform, Predict)
 
 
-def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, str], suffix: str, open_iter=20) -> Workflow:
+def gen_mask_wf(threads: int, model: Union[Path, str], descriptor: Union[Path, str], suffix: str, open_iter=20) -> Workflow:
     workflow = Workflow(name=f'brain_mask_creation{suffix}')
     crunch = Node(Conform(),
                   name=f"crunch{suffix}")
@@ -31,7 +31,7 @@ def gen_mask_wf(threads: int, model: Union[Path, str], descriptior: Union[Path, 
     brain_mask.plugin_args = {'sbatch_args': f'--nodes 1 --cpus-per-task {threads}'}
     brain_mask.inputs.threads = threads
     brain_mask.inputs.model = model  # To put in the singularity
-    brain_mask.inputs.descriptor = descriptior
+    brain_mask.inputs.descriptor = descriptor
 
     workflow.connect(crunched_normalization, 'intensity_normalized', brain_mask, 'img')
 

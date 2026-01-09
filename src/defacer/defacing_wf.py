@@ -92,7 +92,7 @@ def main(indir: Path,
     mask_wf_list = []
     for echo in range(echo_nb):
         suffix = f'_e{echo + 1}' if echo_nb > 1 else ''
-        mask_wf_list.append(gen_mask_wf(threads4mask, model=modeldir, descriptior=descriptor, suffix=suffix, open_iter=opening))
+        mask_wf_list.append(gen_mask_wf(threads4mask, model=modeldir, descriptor=descriptor, suffix=suffix, open_iter=opening))
         workflow.add_nodes([mask_wf_list[echo]])
 
     # To make sure the mask and the original image are in the same space
