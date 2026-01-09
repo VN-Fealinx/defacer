@@ -250,7 +250,7 @@ def threshold(img: nib.Nifti1Image,
         # Ensure at least 1 iteration per dimension if open_iter > 0
         radius_voxels = tuple(np.maximum(radius_voxels, 1))
 
-        ori_array = array.copy()
+        array_morph = array.copy()
 
         if binarize:
             # Apply dimension-adaptive erosion/dilation using 1D footprints
@@ -264,7 +264,7 @@ def threshold(img: nib.Nifti1Image,
 
                 # Apply erosion for this dimension
                 for _ in range(radius_voxels[dim]):
-                    array = binary_erosion(array, footprint=footprint_1d)
+                    array_morph = binary_erosion(array_morph, footprint=footprint_1d)
 
             # Apply dilation (reverse order, same dimensions)
             for dim in range(3):
@@ -273,15 +273,18 @@ def threshold(img: nib.Nifti1Image,
                 footprint_1d[tuple([1 if i != dim else slice(0, 3) for i in range(3)])] = True
 
                 for _ in range(radius_voxels[dim]):
-                    array = binary_dilation(array, footprint=footprint_1d)
+                    array_morph = binary_dilation(array_morph, footprint=footprint_1d)
 
-            array = array.astype(np.uint8)
+            array_morph = array_morph.astype(np.uint8)
         else:
             # Use anisotropic ellipsoid footprint for non-binary case
             footprint = create_anisotropic_ellipsoid(radius_voxels)
-            array = opening(array, footprint=footprint)
+            array_morph = opening(array_morph, footprint=footprint)
     if clusterCheck in ('top', 'size') or minVol:
-        labeled_clusters = label(array)
+        if open_iter:
+            labeled_clusters = label(array_morph)
+        else:
+            labeled_clusters = label(array)
         clst,  clst_cnt = np.unique(
             labeled_clusters[labeled_clusters > 0],
             return_counts=True)
