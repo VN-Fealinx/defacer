@@ -26,4 +26,5 @@ TF = ["tensorflow==2.13.*"]
 
 [project.scripts]
 deface = "defacer.defacing_wf:main"
+deface_nii = "defacer.defacing_nii_wf:main"
 defacer_predict = "defacer.predict:main"
